@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blood.AI — Мгновенная расшифровка анализов</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; background-color: #fcfcfd; background-image: radial-gradient(#e5e7eb 0.5px, transparent 0.5px); background-size: 30px 30px; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .brand-logo { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
+        .header-disclaimer { font-family: 'JetBrains Mono', monospace; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(4px); border-left: 3px solid #ef4444; padding: 4px 12px; }
+        .drop-zone-active { border-color: #ef4444 !important; background-color: rgba(254, 242, 242, 0.5) !important; }
+        .loader { border-top-color: #ef4444; animation: spinner 1s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        #qr-modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(8px); }
+    </style>
+</head>
+<body class="min-h-screen pb-12 text-slate-900">
+
+    <header class="bg-white/80 backdrop-blur-md shadow-sm py-4 mb-8 sticky top-0 z-50 border-b border-slate-100">
+        <div class="max-w-5xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3 cursor-pointer" onclick="location.reload()">
+                <div class="brand-logo p-2.5 rounded-2xl text-white"><i class="fas fa-droplet text-xl"></i></div>
+                <div>
+                    <h1 class="text-2xl font-black tracking-tighter text-slate-900 uppercase">Blood<span class="text-red-600">.ai</span></h1>
+                    <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Digital Blood Analysis</span>
+                </div>
+            </div>
+            <div class="header-disclaimer max-w-md shadow-sm">
+                <p class="text-[10px] text-slate-600 font-medium"><strong class="text-red-600 uppercase">Отказ от ответственности:</strong> Не является медицинским диагнозом.</p>
+            </div>
+            <div class="hidden lg:flex items-center space-x-6">
+                <button onclick="toggleQRModal()" class="text-slate-500 hover:text-red-600 text-[10px] font-black uppercase tracking-widest"><i class="fas fa-share-nodes mr-2"></i> Поделиться</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4">
+        <section id="promo-section" class="mb-12 transition-all duration-500">
+            <div class="bg-white border border-red-100 rounded-[2.5rem] shadow-2xl p-8 md:p-16 relative overflow-hidden">
+                <div class="relative z-10">
+                    <h2 class="text-4xl md:text-5xl font-black text-slate-900 mb-6">Ваша кровь говорит. <span class="text-red-600 italic">Мы переводим.</span></h2>
+                    <button onclick="showUploadSection()" class="bg-red-600 hover:bg-red-700 text-white px-12 py-5 rounded-3xl font-black text-sm shadow-xl shadow-red-200">АНАЛИЗИРОВАТЬ СЕЙЧАС</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="upload-section" class="hidden flex flex-col items-center mb-16 fade-in">
+            <div class="bg-white rounded-[2.5rem] shadow-2xl p-6 w-full max-w-[500px] border border-slate-100">
+                <div id="drop-zone" class="border-4 border-dashed border-slate-100 rounded-[2rem] p-16 text-center cursor-pointer hover:border-red-400 transition-colors">
+                    <input type="file" id="file-input" class="hidden" accept=".pdf,image/*">
+                    <i class="fas fa-file-medical text-red-500 text-4xl mb-4"></i>
+                    <p class="text-sm font-black text-slate-800 uppercase">Нажмите для загрузки</p>
+                </div>
+                <div id="loading" class="hidden mt-8 text-center p-6 bg-slate-50 rounded-3xl">
+                    <div class="loader ease-linear rounded-full border-4 border-t-4 border-slate-200 h-10 w-10 mb-6 mx-auto"></div>
+                    <p id="loading-text" class="text-red-600 font-black text-[11px] uppercase tracking-widest animate-pulse">Обработка...</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="results-section" class="hidden space-y-8 fade-in pb-20">
+            <div class="bg-slate-900 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                <div class="relative z-10">
+                    <span class="bg-red-600 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">Отчет готов</span>
+                    <h3 id="client-fio" class="text-3xl font-black mt-4 mb-2">ФИО</h3>
+                    <p class="text-slate-400 font-bold uppercase text-[10px] tracking-widest"><span id="client-gender"></span> • <span id="client-age"></span> • <span id="analysis-date"></span></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button id="voice-btn" onclick="playSummaryVoice()" class="flex items-center justify-between bg-white hover:bg-red-50 p-6 rounded-[2rem] border border-slate-100 shadow-sm transition-all text-left">
+                    <div class="flex items-center space-x-4">
+                        <div class="bg-red-600 text-white p-4 rounded-2xl"><i class="fas fa-headphones-simple"></i></div>
+                        <span id="voice-btn-text" class="text-slate-900 font-black text-sm uppercase">Аудио-заключение</span>
+                    </div>
+                </button>
+                <button onclick="generateDietPlan()" class="flex items-center justify-between bg-white hover:bg-emerald-50 p-6 rounded-[2rem] border border-slate-100 shadow-sm transition-all text-left">
+                    <div class="flex items-center space-x-4">
+                        <div class="bg-emerald-600 text-white p-4 rounded-2xl"><i class="fas fa-utensils"></i></div>
+                        <span class="text-slate-900 font-black text-sm uppercase">План питания</span>
+                    </div>
+                </button>
+            </div>
+
+            <div class="bg-white rounded-[2.5rem] shadow-xl overflow-hidden border border-slate-100">
+                <div class="p-8 border-b border-slate-50 bg-slate-50/50"><h3 class="text-xs font-black text-slate-400 uppercase tracking-widest">Маркеры</h3></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse"><tbody id="results-body" class="divide-y divide-slate-50"></tbody></table>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div class="lg:col-span-3 bg-white rounded-[2.5rem] p-10 shadow-xl border border-slate-100">
+                    <h3 class="text-xs font-black text-emerald-600 uppercase mb-6 tracking-widest">Вердикт</h3>
+                    <div id="expert-summary" class="text-slate-700 leading-relaxed italic font-medium"></div>
+                </div>
+                <div class="lg:col-span-2 bg-white rounded-[2.5rem] p-10 shadow-xl border border-slate-100">
+                    <h3 class="text-xs font-black text-red-600 uppercase mb-6 tracking-widest animate-pulse">Приоритет</h3>
+                    <div id="priority-action" class="text-slate-900 font-black text-xl leading-tight"></div>
+                </div>
+            </div>
+
+            <div id="diet-plan-container" class="hidden bg-emerald-950 rounded-[2.5rem] p-10 text-white shadow-2xl fade-in mt-6">
+                <h3 class="text-xs font-black text-emerald-400 uppercase mb-6 tracking-widest">Нутрициология</h3>
+                <div id="diet-plan-content" class="text-emerald-50 text-base leading-relaxed whitespace-pre-line font-medium"></div>
+            </div>
+
+            <div class="bg-slate-900 rounded-[2.5rem] p-10 text-white border border-slate-800 shadow-2xl mt-6">
+                <div class="flex items-center justify-between mb-8">
+                    <h3 class="text-xs font-black text-red-500 uppercase tracking-widest">Чат с Blood.AI</h3>
+                </div>
+                <div class="flex flex-col md:flex-row gap-4">
+                    <input type="text" id="ai-question" placeholder="Загрузите анализ, чтобы спросить..." disabled 
+                           class="flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:border-red-600 transition-colors">
+                    <button id="ask-btn" onclick="askAI()" disabled 
+                            class="bg-red-600/50 text-white/50 px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all">
+                        Спросить
+                    </button>
+                </div>
+                <div id="ai-answer" class="mt-8 text-slate-300 text-sm italic hidden p-6 bg-white/5 rounded-3xl border border-white/10 leading-relaxed fade-in"></div>
+            </div>
+            
+            <div class="flex justify-center pt-12"><div id="footer-qrcode"></div></div>
+        </section>
+    </main>
+
+    <div id="qr-modal" class="flex items-center justify-center p-4" onclick="toggleQRModal()">
+        <div class="bg-white rounded-[3rem] p-12 max-w-sm w-full shadow-2xl text-center" onclick="event.stopPropagation()">
+            <div id="modal-qrcode" class="flex justify-center mb-10"></div>
+            <button onclick="toggleQRModal()" class="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest">Закрыть</button>
+        </div>
+    </div>
+
+    <script>
+        const promo=document.getElementById('promo-section'), upload=document.getElementById('upload-section'), resSec=document.getElementById('results-section');
+        const fileInput=document.getElementById('file-input'), dropZone=document.getElementById('drop-zone');
+        const loading=document.getElementById('loading'), loadingText=document.getElementById('loading-text');
+        
+        let currentAnalysisData = null;
+
+        function showUploadSection(){ promo.classList.add('hidden'); upload.classList.remove('hidden'); }
+        function toggleQRModal(){ const m=document.getElementById('qr-modal'); m.style.display=(m.style.display==='flex'?'none':'flex'); }
+
+        dropZone.onclick=()=>fileInput.click();
+        fileInput.onchange=(e)=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
+
+        async function handleFile(file) {
+            loading.classList.remove('hidden'); dropZone.classList.add('hidden');
+            loadingText.innerText = "BLOOD.AI: АНАЛИЗ...";
+            
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/analyze', { method: 'POST', body: formData });
+                if (!response.ok) throw new Error('Ошибка сервера');
+                currentAnalysisData = await response.json();
+                displayResults(currentAnalysisData);
+            } catch (error) {
+                alert("Ошибка: " + error.message + ". Проверьте черное окно!");
+                dropZone.classList.remove('hidden'); loading.classList.add('hidden');
+            }
+        }
+
+        function displayResults(data) {
+            upload.classList.add('hidden'); resSec.classList.remove('hidden');
+            document.getElementById('client-fio').innerText = data.client.fio || "Пациент";
+            document.getElementById('client-gender').innerText = data.client.gender || "—";
+            document.getElementById('client-age').innerText = data.client.age || "—";
+            document.getElementById('analysis-date').innerText = data.client.date || "--.--.----";
+            
+            const tbody = document.getElementById('results-body');
+            tbody.innerHTML = '';
+            (data.abnormal_results || []).forEach(item => {
+                tbody.innerHTML += `<tr class="border-b border-slate-50"><td class="px-8 py-6 font-bold text-sm">${item.name}</td><td class="px-8 py-6 text-slate-400 text-xs mono">${item.range}</td><td class="px-8 py-6 font-black text-red-600 text-lg">${item.value}</td><td class="px-8 py-6 text-sm italic text-slate-600">${item.analysis}</td></tr>`;
+            });
+
+            document.getElementById('expert-summary').innerText = data.expert_summary;
+            document.getElementById('priority-action').innerText = data.priority_action;
+            
+            // Активация чата
+            document.getElementById('ai-question').disabled = false;
+            document.getElementById('ask-btn').disabled = false;
+            document.getElementById('ask-btn').classList.replace('bg-red-600/50', 'bg-red-600');
+            document.getElementById('ask-btn').classList.replace('text-white/50', 'text-white');
+            
+            document.getElementById('diet-plan-container').classList.add('hidden');
+        }
+
+        async function generateDietPlan() {
+            const container = document.getElementById('diet-plan-container');
+            const content = document.getElementById('diet-plan-content');
+            container.classList.remove('hidden');
+            content.innerText = "👩‍⚕️ Диетолог составляет меню... (5-10 сек)";
+            container.scrollIntoView({ behavior: 'smooth' });
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/diet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ analysis_data: currentAnalysisData })
+                });
+                const data = await response.json();
+                
+                if (data.error) throw new Error(data.error); // Показываем ошибку от сервера
+                content.innerHTML = data.diet_plan.replace(/\n/g, '<br>');
+            } catch (error) {
+                content.innerText = "Ошибка: " + error.message;
+            }
+        }
+
+        async function playSummaryVoice() {
+            const btn = document.getElementById('voice-btn-text');
+            const old = btn.innerText;
+            btn.innerText = "🔊 ...";
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/voice', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: currentAnalysisData.expert_summary })
+                });
+                const blob = await response.blob();
+                new Audio(URL.createObjectURL(blob)).play();
+                btn.innerText = "▶️ Еще раз";
+            } catch (e) { btn.innerText = old; alert("Ошибка озвучки"); }
+        }
+
+        async function askAI() {
+            const inp = document.getElementById('ai-question');
+            const btn = document.getElementById('ask-btn');
+            const ans = document.getElementById('ai-answer');
+            const q = inp.value.trim();
+            if (!q) return;
+
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            ans.classList.remove('hidden'); ans.innerText = "Печатаю...";
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/chat', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: q, analysis_data: currentAnalysisData })
+                });
+                const data = await response.json();
+                ans.innerHTML = `<span class="text-red-400 font-bold">Blood.AI:</span><br>${data.answer.replace(/\n/g, '<br>')}`;
+            } catch (e) { ans.innerText = "Ошибка чата."; }
+            btn.innerText = "СПРОСИТЬ"; inp.value = '';
+        }
+        
+        // QR Code
+        window.onload = function() {
+            if(document.getElementById("footer-qrcode")) new QRCode(document.getElementById("footer-qrcode"), { text: window.location.href, width: 80, height: 80 });
+        };
+    </script>
+</body>
+</html>
