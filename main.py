@@ -21,7 +21,7 @@ CLEAN_KEY = "".join(c for c in raw_key if c.isalnum() or c in "-_")
 genai.configure(api_key=CLEAN_KEY)
 
 # Модель
-MODEL_NAME = 'gemini-1.5-flash-001'
+MODEL_NAME = 'gemini-1.5-pro'
 model = genai.GenerativeModel(MODEL_NAME)
 
 # --- ОТКЛЮЧАЕМ ФИЛЬТРЫ БЕЗОПАСНОСТИ (ЧТОБЫ НЕ БЛОКИРОВАЛ МЕДИЦИНУ) ---
