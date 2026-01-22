@@ -7,32 +7,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
-# --- НАСТРОЙКИ ---
-# ВАЖНО: Вставь свой ключ AIza... внутрь кавычек ниже!
-DIRECT_KEY = "AIzaSyCAz70hCFdI-Q7KC17bJYIcgCjIkZBKXMk"
-
-# Берем модель 2.0 Flash, которая ТОЧНО есть в твоих логах
-MODEL_NAME = 'gemini-2.0-flash'
-
-# 1. Настройка ключа
+# 1. Загрузка настроек
 load_dotenv()
-# Если вы вставили ключ выше, используем его. Если нет - ищем в сервере.
-raw_key = DIRECT_KEY if DIRECT_KEY != "PASTE_YOUR_KEY_HERE" else os.getenv("GOOGLE_API_KEY")
+
+# Мы берем ключ ТОЛЬКО из безопасного хранилища Render
+raw_key = os.getenv("GOOGLE_API_KEY")
 
 if not raw_key:
-    print("!!! ОШИБКА: Ключ не найден. Вставьте его в строку 16 в main.py", flush=True)
-    # Не выходим, чтобы сервер не падал циклично, но работать он не будет
+    print("!!! ОШИБКА: Ключ не найден в Environment Variables", flush=True)
 else:
+    # Очистка ключа от пробелов
     CLEAN_KEY = "".join(c for c in raw_key if c.isalnum() or c in "-_")
     genai.configure(api_key=CLEAN_KEY)
-    print(f"--> Ключ принят. Модель выбрана: {MODEL_NAME}", flush=True)
+    print(f"--> Ключ загружен из настроек. Длина: {len(CLEAN_KEY)}", flush=True)
+
+# 2. Выбираем модель, которая точно работает (из диагностики)
+MODEL_NAME = 'gemini-2.0-flash'
+model = genai.GenerativeModel(MODEL_NAME)
 
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
-
-model = genai.GenerativeModel(MODEL_NAME)
 
 @app.post("/api/analyze")
 async def analyze_blood(file: UploadFile = File(...)):
@@ -40,17 +36,12 @@ async def analyze_blood(file: UploadFile = File(...)):
     try:
         content = await file.read()
         
-        # Промпт для врача
         prompt = """
-        Ты опытный врач-гематолог. Проанализируй этот анализ крови (файл во вложении).
-        
-        ТВОЯ ЗАДАЧА:
-        1. Найди показатели, выходящие за норму.
-        2. Объясни доступно, что это значит.
-        3. Дай краткие рекомендации по питанию.
-        4. Если всё в норме - так и напиши.
-        
-        Ответь в формате HTML (теги <b>, <ul>, <br>), но без ```html.
+        Ты врач-гематолог. Проанализируй анализ крови.
+        1. Выпиши отклонения.
+        2. Объясни их значение.
+        3. Дай рекомендации.
+        Ответь в формате HTML (теги <b>, <ul>), без ```html.
         """
 
         response = model.generate_content(
@@ -68,8 +59,9 @@ async def analyze_blood(file: UploadFile = File(...)):
     except Exception as e:
         err = str(e)
         print(f"!!! ОШИБКА: {err}", flush=True)
-        if "404" in err:
-            return JSONResponse(content={"analysis": f"Ошибка доступа к модели {MODEL_NAME}. Проверьте ключ."}, status_code=500)
+        # Если ошибка 403 - значит ключ снова заблокирован
+        if "403" in err:
+             return JSONResponse(content={"analysis": "Ошибка 403: Ключ заблокирован Google. Создайте новый и добавьте в Environment."}, status_code=500)
         return JSONResponse(content={"analysis": f"Ошибка сервера: {err}"}, status_code=500)
 
 if __name__ == "__main__":
