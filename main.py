@@ -1,32 +1,45 @@
 import os
 import json
+import io
 import uvicorn
 import google.generativeai as genai
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, File, UploadFile, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from dotenv import load_dotenv
+from pydantic import BaseModel
+from gtts import gTTS
 
-# 1. Загрузка настроек
+# 1. Загрузка
 load_dotenv()
-
-# --- ВАЖНАЯ НАСТРОЙКА ---
-# Пробуем самую новую версию 2.5. 
-# Она была ПЕРВОЙ в вашем списке доступных моделей.
-MODEL_NAME = 'gemini-2.5-flash'
-
-# Получаем ключ из сервера (Environment Variables)
 raw_key = os.getenv("GOOGLE_API_KEY")
 
+# --- БЛОК ОЧИСТКИ КЛЮЧА ---
 if not raw_key:
-    print("!!! КРИТИЧЕСКАЯ ОШИБКА: Не найден GOOGLE_API_KEY в настройках сервера Render!", flush=True)
-else:
+    # Если ключа нет в .env, пробуем хардкод (на случай локальных тестов)
+    # Вставьте ключ сюда, если .env не работает
+    DIRECT_KEY = "PASTE_YOUR_KEY_HERE"
+    if DIRECT_KEY != "PASTE_YOUR_KEY_HERE":
+        raw_key = DIRECT_KEY
+    else:
+        print("ОШИБКА: Нет ключа API", flush=True)
+
+if raw_key:
     CLEAN_KEY = "".join(c for c in raw_key if c.isalnum() or c in "-_")
-    try:
-        genai.configure(api_key=CLEAN_KEY)
-        print(f"--> [СИСТЕМА] Ключ загружен. Пробуем модель: {MODEL_NAME}", flush=True)
-    except Exception as e:
-        print(f"!!! ОШИБКА КОНФИГУРАЦИИ: {e}", flush=True)
+    genai.configure(api_key=CLEAN_KEY)
+    print(f"--> Ключ загружен. Длина: {len(CLEAN_KEY)}", flush=True)
+
+# Модель (оставляем 2.5, раз она у вас работает)
+MODEL_NAME = 'gemini-2.5-flash' 
+model = genai.GenerativeModel(MODEL_NAME)
+
+# Настройки безопасности
+SAFETY_SETTINGS = [
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+]
 
 app = FastAPI()
 
@@ -37,57 +50,118 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Инициализация модели
-try:
-    model = genai.GenerativeModel(MODEL_NAME)
-except Exception as e:
-    print(f"Ошибка создания модели: {e}")
+class DietRequest(BaseModel):
+    analysis_data: dict
+
+class ChatRequest(BaseModel):
+    question: str
+    analysis_data: dict
+
+# Промпт стал строже
+SYSTEM_PROMPT = """
+Ты врач-лаборант. Твоя задача — извлечь данные из анализа крови в строгий JSON.
+
+ВАЖНО: Если имя или возраст не указаны, пиши "Не указано".
+Если показателей нет — оставь массив пустым.
+
+ТВОЙ ОТВЕТ ДОЛЖЕН БЫТЬ ТОЛЬКО ВАЛИДНЫМ JSON СЛЕДУЮЩЕЙ СТРУКТУРЫ:
+{
+  "client": { 
+      "fio": "Иванов И.И. или Не указано", 
+      "gender": "М/Ж или -", 
+      "age": "Возраст или -", 
+      "date": "Дата анализа или -" 
+  },
+  "abnormal_results": [ 
+      { "name": "Название показателя", "range": "Норма", "value": "Значение", "analysis": "Краткое объяснение простым языком" } 
+  ],
+  "expert_summary": "Краткий вывод по состоянию здоровья (2-3 предложения).",
+  "priority_action": "К какому врачу идти (например: Терапевт)."
+}
+"""
 
 @app.post("/api/analyze")
-async def analyze_blood(file: UploadFile = File(...)):
-    print(f"\n--> [ЗАПРОС] Получен файл: {file.filename}", flush=True)
-    
-    if not raw_key:
-        return JSONResponse(content={"analysis": "Ошибка сервера: Отсутствует API ключ."}, status_code=500)
-
+async def analyze(file: UploadFile = File(...)):
+    print(f"\n--> [АНАЛИЗ] Получен файл: {file.filename}", flush=True)
     try:
         content = await file.read()
         
-        prompt = """
-        Ты опытный врач-гематолог. Внимательно проанализируй этот анализ крови.
-        
-        ТВОЯ ЗАДАЧА:
-        1. Выяви все показатели, которые выходят за пределы нормы.
-        2. Объясни простым языком, о чем это говорит.
-        3. Дай краткие рекомендации по питанию.
-        
-        ОТВЕТ: Строго в формате HTML (<b>, <ul>, <br>), без ```html.
-        """
-
-        # Отправка в Google
+        # --- ГЛАВНОЕ ИЗМЕНЕНИЕ: FORCED JSON ---
+        # Мы заставляем модель отвечать в формате JSON
         response = model.generate_content(
-            [prompt, {"mime_type": "application/pdf", "data": content}],
-            safety_settings=[
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-            ]
+            [SYSTEM_PROMPT, {"mime_type": file.content_type, "data": content}],
+            safety_settings=SAFETY_SETTINGS,
+            generation_config={"response_mime_type": "application/json"}
         )
         
-        return JSONResponse(content={"analysis": response.text})
+        # Попытка парсинга
+        try:
+            # Очистка на случай, если модель добавит ```json
+            text_response = response.text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(text_response)
+            
+            # --- ПОДУШКА БЕЗОПАСНОСТИ ---
+            # Если модель забыла добавить блок client, мы добавим его сами, чтобы сайт не упал
+            if "client" not in data:
+                data["client"] = {"fio": "Пациент (данные не найдены)", "gender": "-", "age": "-", "date": "-"}
+            if "abnormal_results" not in data:
+                data["abnormal_results"] = []
+            if "expert_summary" not in data:
+                data["expert_summary"] = "Не удалось сформировать автоматическое заключение. Обратитесь к врачу."
+            if "priority_action" not in data:
+                data["priority_action"] = "Терапевт"
+                
+            return JSONResponse(content=data)
+
+        except json.JSONDecodeError:
+            # Если вернулся мусор вместо JSON
+            print("!!! ОШИБКА JSON: Модель вернула некорректный формат.")
+            return JSONResponse(content={
+                "client": {"fio": "Ошибка чтения", "gender": "-", "age": "-", "date": "-"},
+                "abnormal_results": [],
+                "expert_summary": "Произошла ошибка обработки данных ИИ. Попробуйте еще раз.",
+                "priority_action": "Повторить загрузку"
+            })
 
     except Exception as e:
-        error_msg = str(e)
-        print(f"!!! ОШИБКА ПРИ АНАЛИЗЕ: {error_msg}", flush=True)
-        
-        # Если снова лимит (429) - даем пользователю таймер
-        if "429" in error_msg:
-            return JSONResponse(content={"analysis": "⚠️ Google перегружен. Пожалуйста, подождите 60 секунд и попробуйте снова (Лимит Beta-версии)."}, status_code=429)
-        if "404" in error_msg:
-            return JSONResponse(content={"analysis": f"⚠️ Модель {MODEL_NAME} недоступна. Нужен обычный Google аккаунт."}, status_code=404)
-             
-        return JSONResponse(content={"analysis": f"Ошибка: {error_msg}"}, status_code=500)
+        err_msg = str(e)
+        print(f"!!! КРИТИЧЕСКАЯ ОШИБКА: {err_msg}", flush=True)
+        # Обработка лимитов
+        if "429" in err_msg:
+             return JSONResponse(content={"error": "Слишком много запросов. Подождите 1 минуту."}, status_code=429)
+        return JSONResponse(content={"error": err_msg}, status_code=500)
+
+@app.post("/api/diet")
+async def generate_diet(request: DietRequest):
+    # Упрощенная логика для стабильности
+    try:
+        prompt = f"Составь диету на 1 день для пациента с такими анализами: {json.dumps(request.analysis_data, ensure_ascii=False)}. Используй HTML теги <b> и <br>."
+        response = model.generate_content(prompt)
+        return JSONResponse(content={"diet_plan": response.text})
+    except Exception as e:
+        return JSONResponse(content={"diet_plan": "Не удалось составить диету."}, status_code=200) # Возвращаем 200, чтобы не пугать юзера ошибкой
+
+@app.post("/api/voice")
+async def generate_voice(item: dict = Body(...)):
+    try:
+        text = item.get("text", "Нет данных для озвучки")
+        tts = gTTS(text=text, lang='ru')
+        audio_stream = io.BytesIO()
+        tts.write_to_fp(audio_stream)
+        audio_stream.seek(0)
+        return StreamingResponse(audio_stream, media_type="audio/mp3")
+    except Exception as e:
+        print(f"!!! ОШИБКА ГОЛОСА: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/chat")
+async def chat_with_ai(request: ChatRequest):
+    try:
+        chat_prompt = f"Контекст анализов: {json.dumps(request.analysis_data, ensure_ascii=False)}. Вопрос: {request.question}"
+        response = model.generate_content(chat_prompt)
+        return JSONResponse(content={"answer": response.text})
+    except Exception as e:
+        return JSONResponse(content={"answer": "Извините, я сейчас не могу ответить."}, status_code=200)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
