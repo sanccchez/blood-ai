@@ -11,9 +11,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- ВАЖНАЯ НАСТРОЙКА ---
-# Мы используем "Lite" версию новейшей модели. 
-# Она доступна в вашем аккаунте и должна быть лояльнее к лимитам.
-MODEL_NAME = 'gemini-2.0-flash-lite'
+# Пробуем самую новую версию 2.5. 
+# Она была ПЕРВОЙ в вашем списке доступных моделей.
+MODEL_NAME = 'gemini-2.5-flash'
 
 # Получаем ключ из сервера (Environment Variables)
 raw_key = os.getenv("GOOGLE_API_KEY")
@@ -81,10 +81,11 @@ async def analyze_blood(file: UploadFile = File(...)):
         error_msg = str(e)
         print(f"!!! ОШИБКА ПРИ АНАЛИЗЕ: {error_msg}", flush=True)
         
+        # Если снова лимит (429) - даем пользователю таймер
         if "429" in error_msg:
-            return JSONResponse(content={"analysis": "⚠️ Слишком быстро. Google просит подождать 1 минуту (Лимит студенческой версии)."}, status_code=429)
+            return JSONResponse(content={"analysis": "⚠️ Google перегружен. Пожалуйста, подождите 60 секунд и попробуйте снова (Лимит Beta-версии)."}, status_code=429)
         if "404" in error_msg:
-            return JSONResponse(content={"analysis": f"⚠️ Модель {MODEL_NAME} недоступна для этого ключа. Нужен ключ из другого проекта."}, status_code=404)
+            return JSONResponse(content={"analysis": f"⚠️ Модель {MODEL_NAME} недоступна. Нужен обычный Google аккаунт."}, status_code=404)
              
         return JSONResponse(content={"analysis": f"Ошибка: {error_msg}"}, status_code=500)
 
