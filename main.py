@@ -53,27 +53,30 @@ class ChatRequest(BaseModel):
     question: str
     analysis_data: dict
 
-# --- ОБНОВЛЕННЫЙ ПРОМПТ (МУЛЬТИ-ВРАЧИ) ---
+# --- ОБНОВЛЕННЫЙ ПРОМПТ (ЧЕЛОВЕЧЕСКИЕ ОБЪЯСНЕНИЯ) ---
 SYSTEM_PROMPT = """
-Ты профессиональный медицинский консилиум. Твоя задача — извлечь данные в JSON.
+Ты — заботливый и опытный врач. Твоя задача — извлечь данные из анализа в JSON.
 
-ГЛАВНОЕ ПРАВИЛО ПО ВРАЧАМ (поле priority_action):
-Ты должен перечислить ВСЕХ специалистов, к которым нужно обратиться, через запятую.
-1. ТТГ, Т3, Т4, Глюкоза, Инсулин -> Эндокринолог.
-2. Гемоглобин, Ферритин, Железо -> Гематолог.
-3. Холестерин, Липидный профиль, Сердце -> Кардиолог.
-4. АЛТ, АСТ, Билирубин -> Гастроэнтеролог.
-5. Если затронуто несколько систем (например, щитовидка И холестерин) -> пиши: "Эндокринолог, Кардиолог".
-6. Не пиши "Терапевт", если есть конкретные отклонения. Терапевт только для нормы.
+ГЛАВНЫЕ ПРАВИЛА:
+1. В поле "priority_action" перечисли ВСЕХ нужных врачей через запятую (Эндокринолог, Кардиолог и т.д.).
+2. В поле "analysis" (последняя колонка таблицы) ЗАПРЕЩЕНО писать просто "Повышен" или "Понижен".
+   ТЫ ДОЛЖЕН НАПИСАТЬ ПРИЧИНУ ПРОСТЫМИ СЛОВАМИ.
+   
+   ПЛОХО: "Значение выше нормы."
+   ХОРОШО: "Может указывать на воспаление или недавнюю простуду."
+   ХОРОШО: "Часто бывает при нехватке железа или плохом питании."
+   ХОРОШО: "Возможно, вы ели много сладкого накануне."
+   
+   Пиши коротко, понятно, без сложных медицинских терминов. Как будто объясняешь другу.
 
-ТВОЙ ОТВЕТ ДОЛЖЕН БЫТЬ ТОЛЬКО ВАЛИДНЫМ JSON:
+ТВОЙ ОТВЕТ — ТОЛЬКО JSON:
 {
-  "client": { "fio": "Имя или Не указано", "gender": "Пол", "age": "Возраст", "date": "Дата" },
+  "client": { "fio": "Имя", "gender": "Пол", "age": "Возраст", "date": "Дата" },
   "abnormal_results": [ 
-      { "name": "Показатель", "range": "Норма", "value": "Значение", "analysis": "Краткое объяснение" } 
+      { "name": "Показатель", "range": "Норма", "value": "Значение", "analysis": "Простое объяснение причины (2 предложения)" } 
   ],
-  "expert_summary": "Сводка по здоровью.",
-  "priority_action": "Эндокринолог, Кардиолог" 
+  "expert_summary": "Общее заключение по здоровью.",
+  "priority_action": "Эндокринолог, Гематолог" 
 }
 """
 
@@ -107,7 +110,7 @@ async def analyze(file: UploadFile = File(...)):
             return JSONResponse(content={
                 "client": {"fio": "Ошибка", "gender": "-", "age": "-", "date": "-"},
                 "abnormal_results": [],
-                "expert_summary": "Ошибка обработки.",
+                "expert_summary": "Не удалось прочитать данные.",
                 "priority_action": "Повторить"
             })
 
@@ -121,11 +124,11 @@ async def analyze(file: UploadFile = File(...)):
 @app.post("/api/diet")
 async def generate_diet(request: DietRequest):
     try:
-        prompt = f"Составь меню на 1 день для: {json.dumps(request.analysis_data, ensure_ascii=False)}. HTML теги <b>,<br>."
+        prompt = f"Составь простое меню на 1 день, чтобы исправить эти отклонения: {json.dumps(request.analysis_data, ensure_ascii=False)}. Формат HTML (<b>, <br>)."
         response = model.generate_content(prompt)
         return JSONResponse(content={"diet_plan": response.text})
     except Exception as e:
-        return JSONResponse(content={"diet_plan": "Ошибка диеты."}, status_code=200)
+        return JSONResponse(content={"diet_plan": "Ошибка составления диеты."}, status_code=200)
 
 @app.post("/api/voice")
 async def generate_voice(item: dict = Body(...)):
@@ -142,7 +145,7 @@ async def generate_voice(item: dict = Body(...)):
 @app.post("/api/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
-        chat_prompt = f"Контекст: {json.dumps(request.analysis_data, ensure_ascii=False)}. Вопрос: {request.question}"
+        chat_prompt = f"Контекст анализов: {json.dumps(request.analysis_data, ensure_ascii=False)}. Вопрос пациента: {request.question}. Ответь просто и понятно."
         response = model.generate_content(chat_prompt)
         return JSONResponse(content={"answer": response.text})
     except Exception as e:
