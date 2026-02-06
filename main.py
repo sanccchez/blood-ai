@@ -26,7 +26,7 @@ if raw_key:
     genai.configure(api_key=CLEAN_KEY)
     print(f"--> Ключ загружен. Длина: {len(CLEAN_KEY)}", flush=True)
 
-# Модель (оставляем 2.5, она у вас работает)
+# Модель
 MODEL_NAME = 'gemini-2.5-flash' 
 model = genai.GenerativeModel(MODEL_NAME)
 
@@ -53,26 +53,27 @@ class ChatRequest(BaseModel):
     question: str
     analysis_data: dict
 
-# --- ОБНОВЛЕННЫЙ ПРОМПТ (СТРОГИЙ ВЫБОР ВРАЧА) ---
+# --- ОБНОВЛЕННЫЙ ПРОМПТ (МУЛЬТИ-ВРАЧИ) ---
 SYSTEM_PROMPT = """
-Ты профессиональный медицинский ассистент. Твоя задача — извлечь данные из анализа крови в строгий JSON.
+Ты профессиональный медицинский консилиум. Твоя задача — извлечь данные в JSON.
 
-ВАЖНЫЕ ПРАВИЛА ПО ВРАЧАМ (поле priority_action):
-1. Если есть отклонения в ТТГ, Т3, Т4, Глюкозе, Инсулине -> пиши "Эндокринолог".
-2. Если Гемоглобин, Ферритин, Железо, Эритроциты не в норме -> пиши "Гематолог".
-3. Если Холестерин, ЛПНП, Триглицериды -> пиши "Кардиолог".
-4. Если Билирубин, АЛТ, АСТ -> пиши "Гастроэнтеролог".
-5. Пиши "Терапевт" ТОЛЬКО если все анализы в норме или отклонения минимальны.
-6. Пиши ТОЛЬКО специальность (одно-два слова), без лишних фраз.
+ГЛАВНОЕ ПРАВИЛО ПО ВРАЧАМ (поле priority_action):
+Ты должен перечислить ВСЕХ специалистов, к которым нужно обратиться, через запятую.
+1. ТТГ, Т3, Т4, Глюкоза, Инсулин -> Эндокринолог.
+2. Гемоглобин, Ферритин, Железо -> Гематолог.
+3. Холестерин, Липидный профиль, Сердце -> Кардиолог.
+4. АЛТ, АСТ, Билирубин -> Гастроэнтеролог.
+5. Если затронуто несколько систем (например, щитовидка И холестерин) -> пиши: "Эндокринолог, Кардиолог".
+6. Не пиши "Терапевт", если есть конкретные отклонения. Терапевт только для нормы.
 
-ТВОЙ ОТВЕТ ДОЛЖЕН БЫТЬ ТОЛЬКО ВАЛИДНЫМ JSON СЛЕДУЮЩЕЙ СТРУКТУРЫ:
+ТВОЙ ОТВЕТ ДОЛЖЕН БЫТЬ ТОЛЬКО ВАЛИДНЫМ JSON:
 {
   "client": { "fio": "Имя или Не указано", "gender": "Пол", "age": "Возраст", "date": "Дата" },
   "abnormal_results": [ 
-      { "name": "Показатель", "range": "Норма", "value": "Значение", "analysis": "Краткое объяснение простым языком" } 
+      { "name": "Показатель", "range": "Норма", "value": "Значение", "analysis": "Краткое объяснение" } 
   ],
-  "expert_summary": "Сводка по здоровью (2-3 предложения).",
-  "priority_action": "Специальность врача"
+  "expert_summary": "Сводка по здоровью.",
+  "priority_action": "Эндокринолог, Кардиолог" 
 }
 """
 
@@ -82,7 +83,7 @@ async def analyze(file: UploadFile = File(...)):
     try:
         content = await file.read()
         
-        # Запрос в Google с требованием JSON
+        # Запрос в Google
         response = model.generate_content(
             [SYSTEM_PROMPT, {"mime_type": file.content_type, "data": content}],
             safety_settings=SAFETY_SETTINGS,
@@ -90,11 +91,10 @@ async def analyze(file: UploadFile = File(...)):
         )
         
         try:
-            # Очистка от markdown на всякий случай
             text_response = response.text.replace("```json", "").replace("```", "").strip()
             data = json.loads(text_response)
             
-            # Подушка безопасности (если поля пустые)
+            # Подушка безопасности
             if "client" not in data: data["client"] = {}
             if "abnormal_results" not in data: data["abnormal_results"] = []
             if "expert_summary" not in data: data["expert_summary"] = "Анализ завершен."
@@ -103,34 +103,34 @@ async def analyze(file: UploadFile = File(...)):
             return JSONResponse(content=data)
 
         except json.JSONDecodeError:
-            print("!!! ОШИБКА JSON: Модель вернула некорректный формат.")
+            print("!!! ОШИБКА JSON")
             return JSONResponse(content={
-                "client": {"fio": "Ошибка чтения", "gender": "-", "age": "-", "date": "-"},
+                "client": {"fio": "Ошибка", "gender": "-", "age": "-", "date": "-"},
                 "abnormal_results": [],
-                "expert_summary": "Произошла ошибка обработки данных ИИ. Попробуйте еще раз.",
-                "priority_action": "Повторить загрузку"
+                "expert_summary": "Ошибка обработки.",
+                "priority_action": "Повторить"
             })
 
     except Exception as e:
         err_msg = str(e)
-        print(f"!!! КРИТИЧЕСКАЯ ОШИБКА: {err_msg}", flush=True)
+        print(f"!!! ОШИБКА: {err_msg}", flush=True)
         if "429" in err_msg:
-             return JSONResponse(content={"error": "Слишком много запросов. Подождите 1 минуту (Лимит Google)."}, status_code=429)
+             return JSONResponse(content={"error": "Слишком много запросов. Подождите 1 минуту."}, status_code=429)
         return JSONResponse(content={"error": err_msg}, status_code=500)
 
 @app.post("/api/diet")
 async def generate_diet(request: DietRequest):
     try:
-        prompt = f"Составь диету на 1 день для пациента с такими анализами: {json.dumps(request.analysis_data, ensure_ascii=False)}. Используй HTML теги <b> и <br>."
+        prompt = f"Составь меню на 1 день для: {json.dumps(request.analysis_data, ensure_ascii=False)}. HTML теги <b>,<br>."
         response = model.generate_content(prompt)
         return JSONResponse(content={"diet_plan": response.text})
     except Exception as e:
-        return JSONResponse(content={"diet_plan": "Не удалось составить диету."}, status_code=200)
+        return JSONResponse(content={"diet_plan": "Ошибка диеты."}, status_code=200)
 
 @app.post("/api/voice")
 async def generate_voice(item: dict = Body(...)):
     try:
-        text = item.get("text", "Нет данных для озвучки")
+        text = item.get("text", "Нет данных")
         tts = gTTS(text=text, lang='ru')
         audio_stream = io.BytesIO()
         tts.write_to_fp(audio_stream)
@@ -142,11 +142,11 @@ async def generate_voice(item: dict = Body(...)):
 @app.post("/api/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
-        chat_prompt = f"Контекст анализов: {json.dumps(request.analysis_data, ensure_ascii=False)}. Вопрос: {request.question}"
+        chat_prompt = f"Контекст: {json.dumps(request.analysis_data, ensure_ascii=False)}. Вопрос: {request.question}"
         response = model.generate_content(chat_prompt)
         return JSONResponse(content={"answer": response.text})
     except Exception as e:
-        return JSONResponse(content={"answer": "Извините, я сейчас не могу ответить."}, status_code=200)
+        return JSONResponse(content={"answer": "Ошибка чата."}, status_code=200)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
