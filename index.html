@@ -119,4 +119,240 @@
 
             <div class="glass-panel rounded-3xl p-8 relative overflow-hidden">
                 <div class="absolute top-0 left-0 w-1 h-full bg-slate-900"></div>
-                <h
+                <h3 class="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-user-doctor text-slate-500"></i>
+                    Заключение AI
+                </h3>
+                <p id="expert-summary" class="text-slate-600 leading-relaxed mb-6 text-sm md:text-base">
+                    Анализ данных...
+                </p>
+                
+                <div class="flex flex-wrap gap-3 items-center">
+                    <div class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider">
+                        <i class="fa-solid fa-angles-right mr-1"></i> Куда идти: <span id="priority-action" class="text-slate-900">Терапевт</span>
+                    </div>
+                    <button onclick="playSummaryVoice()" class="ml-auto w-10 h-10 rounded-full bg-slate-900 text-white hover:scale-110 transition flex items-center justify-center">
+                        <i class="fa-solid fa-volume-high"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button onclick="generateDietPlan()" class="p-4 rounded-2xl bg-white border border-slate-200 hover:border-green-500 hover:shadow-lg transition-all text-left group">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:bg-green-500 group-hover:text-white transition">
+                            <i class="fa-solid fa-leaf"></i>
+                        </div>
+                        <span class="font-bold text-slate-700 text-sm">План питания</span>
+                    </div>
+                    <p class="text-xs text-slate-400 pl-11">Рекомендации по диете</p>
+                </button>
+                
+                <button onclick="document.getElementById('ai-question').focus()" class="p-4 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 hover:shadow-lg transition-all text-left group">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition">
+                            <i class="fa-solid fa-comments"></i>
+                        </div>
+                        <span class="font-bold text-slate-700 text-sm">Чат с врачом</span>
+                    </div>
+                    <p class="text-xs text-slate-400 pl-11">Задать вопрос AI</p>
+                </button>
+            </div>
+
+            <div id="diet-plan-container" class="hidden glass-panel rounded-3xl p-8 border-l-4 border-green-500 animate-fade-in">
+                <h3 class="font-bold text-slate-900 mb-4 text-green-700">🥦 Персональное меню</h3>
+                <div id="diet-plan-content" class="text-slate-600 leading-relaxed text-sm"></div>
+            </div>
+
+            <div class="glass-panel rounded-3xl p-1 bg-gradient-to-br from-slate-800 to-slate-900 text-white shadow-2xl mt-8">
+                <div class="p-6">
+                    <p id="ai-answer" class="text-sm text-slate-300 hidden p-4 bg-white/10 rounded-2xl mb-4 leading-relaxed border border-white/10"></p>
+                </div>
+                <div class="p-2 flex gap-2">
+                    <input id="ai-question" type="text" placeholder="Спросите что-нибудь..." disabled
+                        class="w-full bg-slate-900/50 text-white placeholder-slate-500 px-6 py-4 rounded-2xl outline-none font-medium text-sm focus:bg-slate-900 transition">
+                    <button id="ask-btn" onclick="askAI()" disabled 
+                        class="bg-red-600 text-white w-14 rounded-2xl font-bold hover:bg-red-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-lg shadow-red-900/50">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+            
+        </div>
+    </main>
+
+    <footer class="mt-12 text-center pb-8 opacity-40 hover:opacity-100 transition-opacity">
+        <div id="footer-qrcode" class="flex justify-center mb-4 mix-blend-multiply"></div>
+        <p class="text-[10px] text-slate-500 font-mono tracking-widest uppercase">Secured by Google Cloud • 2026</p>
+    </footer>
+
+    <div id="qr-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center animate-fade-in" onclick="toggleQRModal()">
+        <div class="bg-white p-10 rounded-[2rem] text-center max-w-xs mx-4 shadow-2xl transform transition-all scale-100" onclick="event.stopPropagation()">
+            <h3 class="font-bold text-slate-800 mb-6 text-lg">Сканируйте телефоном</h3>
+            <div id="modal-qrcode" class="flex justify-center mb-6"></div>
+            <p class="text-xs text-slate-400 font-medium">Чтобы загрузить фото анализа</p>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = "https://blood-ai-server.onrender.com"; 
+
+        const promo=document.getElementById('promo-section'), upload=document.getElementById('upload-section'), resSec=document.getElementById('results-section');
+        const fileInput=document.getElementById('file-input'), dropZone=document.getElementById('drop-zone');
+        const loading=document.getElementById('loading'), loadingText=document.getElementById('loading-text');
+        
+        let currentAnalysisData = null;
+        let wakeUpTimer = null;
+
+        function showUploadSection(){ promo.classList.add('hidden'); upload.classList.remove('hidden'); }
+        function toggleQRModal(){ 
+            const m=document.getElementById('qr-modal'); 
+            m.style.display=(m.style.display==='flex'?'none':'flex');
+            if(m.style.display==='flex' && !document.getElementById('modal-qrcode').hasChildNodes()){
+                 new QRCode(document.getElementById("modal-qrcode"), { text: window.location.href, width: 180, height: 180 });
+            }
+        }
+
+        dropZone.onclick=()=>fileInput.click();
+        dropZone.ondragover=(e)=>{e.preventDefault(); dropZone.classList.add('border-red-500', 'bg-red-50');};
+        dropZone.ondragleave=(e)=>{e.preventDefault(); dropZone.classList.remove('border-red-500', 'bg-red-50');};
+        dropZone.ondrop=(e)=>{e.preventDefault(); handleFile(e.dataTransfer.files[0]);};
+        fileInput.onchange=(e)=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
+
+        async function handleFile(file) {
+            loading.classList.remove('hidden'); dropZone.classList.add('hidden');
+            loadingText.innerText = "Связь с медицинским облаком...";
+            
+            wakeUpTimer = setTimeout(() => {
+                loadingText.innerText = "Сервер просыпается... Подождите ~40 сек.";
+                loadingText.className = "text-orange-500 font-mono text-xs animate-pulse";
+            }, 4000);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${SERVER_URL}/api/analyze`, { method: 'POST', body: formData });
+                clearTimeout(wakeUpTimer);
+                
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error || response.status);
+                }
+                currentAnalysisData = await response.json();
+                displayResults(currentAnalysisData);
+            } catch (error) {
+                clearTimeout(wakeUpTimer);
+                alert(error.message.includes("429") ? "✋ Лимит запросов. Подождите 1 минуту." : "Ошибка: " + error.message);
+                dropZone.classList.remove('hidden'); loading.classList.add('hidden'); fileInput.value = ''; 
+            }
+        }
+
+        function displayResults(data) {
+            upload.classList.add('hidden'); resSec.classList.remove('hidden');
+            const client = data.client || {};
+            document.getElementById('client-fio').innerText = client.fio || "Пациент";
+            document.getElementById('client-gender').innerText = client.gender || "—";
+            document.getElementById('client-age').innerText = client.age || "—";
+            document.getElementById('analysis-date').innerText = client.date || "--.--.----";
+            
+            const tbody = document.getElementById('results-body');
+            tbody.innerHTML = '';
+            
+            const results = data.abnormal_results || [];
+            if(results.length === 0) {
+                 tbody.innerHTML = `<tr><td colspan="4" class="px-8 py-10 text-center text-green-600 font-bold bg-green-50/50"><i class="fa-solid fa-check-circle text-4xl mb-2 block"></i>Показатели в норме!</td></tr>`;
+            } else {
+                results.forEach(item => {
+                    // ГЕНЕРАЦИЯ ВИЗУАЛЬНОЙ СТРОКИ
+                    tbody.innerHTML += `
+                    <tr class="border-b border-slate-50 hover:bg-slate-50 transition-colors group">
+                        <td class="px-6 py-5 align-top w-1/4">
+                            <div class="font-bold text-slate-800 text-sm">${item.name}</div>
+                            <div class="text-[10px] text-slate-400 font-mono mt-1 bg-slate-100 inline-block px-1.5 py-0.5 rounded">
+                                Норма: ${item.range}
+                            </div>
+                        </td>
+                        
+                        <td class="px-6 py-5 align-top w-1/4">
+                            <div class="flex flex-col gap-1">
+                                <span class="font-black text-red-600 text-lg leading-none">${item.value}</span>
+                                <div class="scale-bg mt-1">
+                                    <div class="scale-fill"></div>
+                                </div>
+                                <span class="text-[9px] text-red-500 font-bold uppercase tracking-wider">Отклонение</span>
+                            </div>
+                        </td>
+
+                        <td class="px-6 py-5 align-top text-sm text-slate-600 leading-relaxed italic">
+                            ${item.analysis}
+                        </td>
+                    </tr>`;
+                });
+            }
+
+            document.getElementById('expert-summary').innerText = data.expert_summary || "Нет данных.";
+            document.getElementById('priority-action').innerText = data.priority_action || "Терапевт";
+            
+            document.getElementById('ai-question').disabled = false;
+            document.getElementById('ask-btn').disabled = false;
+            document.getElementById('diet-plan-container').classList.add('hidden');
+        }
+
+        async function generateDietPlan() {
+            const container = document.getElementById('diet-plan-container');
+            const content = document.getElementById('diet-plan-content');
+            container.classList.remove('hidden');
+            content.innerText = "🥬 Составляю меню...";
+            container.scrollIntoView({ behavior: 'smooth' });
+
+            try {
+                const response = await fetch(`${SERVER_URL}/api/diet`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ analysis_data: currentAnalysisData })
+                });
+                const data = await response.json();
+                content.innerHTML = data.diet_plan ? data.diet_plan.replace(/\n/g, '<br>') : "Нет данных.";
+            } catch (error) { content.innerText = "Ошибка диеты."; }
+        }
+
+        async function playSummaryVoice() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/voice`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: document.getElementById('expert-summary').innerText })
+                });
+                const blob = await response.blob();
+                new Audio(URL.createObjectURL(blob)).play();
+            } catch (e) { alert("Ошибка озвучки."); }
+        }
+
+        async function askAI() {
+            const inp = document.getElementById('ai-question');
+            const btn = document.getElementById('ask-btn');
+            const ans = document.getElementById('ai-answer');
+            const q = inp.value.trim();
+            if (!q) return;
+
+            const oldIcon = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            btn.disabled = true;
+            ans.classList.remove('hidden'); ans.innerText = "Думаю...";
+            
+            try {
+                const response = await fetch(`${SERVER_URL}/api/chat`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: q, analysis_data: currentAnalysisData })
+                });
+                const data = await response.json();
+                ans.innerHTML = `<strong class="text-white">AI:</strong> ${data.answer.replace(/\n/g, '<br>')}`;
+            } catch (e) { ans.innerText = "Ошибка."; }
+            btn.innerHTML = oldIcon; btn.disabled = false; inp.value = '';
+        }
+        
+        window.onload = function() {
+           if(document.getElementById("footer-qrcode")) new QRCode(document.getElementById("footer-qrcode"), { text: window.location.href, width: 80, height: 80 });
+        };
+    </script>
+</body>
+</html>
