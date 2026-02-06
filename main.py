@@ -10,30 +10,26 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from gtts import gTTS
 
-# 1. Загрузка
+# 1. Загрузка настроек
 load_dotenv()
 raw_key = os.getenv("GOOGLE_API_KEY")
 
-# --- БЛОК ОЧИСТКИ КЛЮЧА ---
+# --- БЛОК БЕЗОПАСНОСТИ КЛЮЧА ---
 if not raw_key:
-    # Если ключа нет в .env, пробуем хардкод (на случай локальных тестов)
-    # Вставьте ключ сюда, если .env не работает
+    # Если локально .env не сработал
     DIRECT_KEY = "PASTE_YOUR_KEY_HERE"
     if DIRECT_KEY != "PASTE_YOUR_KEY_HERE":
         raw_key = DIRECT_KEY
-    else:
-        print("ОШИБКА: Нет ключа API", flush=True)
 
 if raw_key:
     CLEAN_KEY = "".join(c for c in raw_key if c.isalnum() or c in "-_")
     genai.configure(api_key=CLEAN_KEY)
     print(f"--> Ключ загружен. Длина: {len(CLEAN_KEY)}", flush=True)
 
-# Модель (оставляем 2.5, раз она у вас работает)
+# Модель (оставляем 2.5, она у вас работает)
 MODEL_NAME = 'gemini-2.5-flash' 
 model = genai.GenerativeModel(MODEL_NAME)
 
-# Настройки безопасности
 SAFETY_SETTINGS = [
     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -57,61 +53,56 @@ class ChatRequest(BaseModel):
     question: str
     analysis_data: dict
 
-# Промпт стал строже
+# --- ОБНОВЛЕННЫЙ ПРОМПТ (СТРОГИЙ ВЫБОР ВРАЧА) ---
 SYSTEM_PROMPT = """
-Ты профессиональный медицинский ассистент. Твоя задача — извлечь данные в JSON.
+Ты профессиональный медицинский ассистент. Твоя задача — извлечь данные из анализа крови в строгий JSON.
 
-ВАЖНЫЕ ПРАВИЛА ПО ВРАЧАМ:
-1. Если видишь отклонения в гормонах (ТТГ, Т4) -> пиши "Эндокринолог".
-2. Если железо/ферритин/гемоглобин -> пиши "Гематолог".
-3. Если холестерин/сердце -> пиши "Кардиолог".
-4. Пиши "Терапевт" ТОЛЬКО если все анализы в норме или отклонения незначительны.
-5. В поле "priority_action" пиши ТОЛЬКО специальность врача (без лишних слов).
+ВАЖНЫЕ ПРАВИЛА ПО ВРАЧАМ (поле priority_action):
+1. Если есть отклонения в ТТГ, Т3, Т4, Глюкозе, Инсулине -> пиши "Эндокринолог".
+2. Если Гемоглобин, Ферритин, Железо, Эритроциты не в норме -> пиши "Гематолог".
+3. Если Холестерин, ЛПНП, Триглицериды -> пиши "Кардиолог".
+4. Если Билирубин, АЛТ, АСТ -> пиши "Гастроэнтеролог".
+5. Пиши "Терапевт" ТОЛЬКО если все анализы в норме или отклонения минимальны.
+6. Пиши ТОЛЬКО специальность (одно-два слова), без лишних фраз.
 
-Формат ответа (JSON):
+ТВОЙ ОТВЕТ ДОЛЖЕН БЫТЬ ТОЛЬКО ВАЛИДНЫМ JSON СЛЕДУЮЩЕЙ СТРУКТУРЫ:
 {
   "client": { "fio": "Имя или Не указано", "gender": "Пол", "age": "Возраст", "date": "Дата" },
   "abnormal_results": [ 
-      { "name": "Показатель", "range": "Норма", "value": "Значение", "analysis": "Кратко: что это значит" } 
+      { "name": "Показатель", "range": "Норма", "value": "Значение", "analysis": "Краткое объяснение простым языком" } 
   ],
   "expert_summary": "Сводка по здоровью (2-3 предложения).",
-  "priority_action": "Эндокринолог"
+  "priority_action": "Специальность врача"
 }
-"""@app.post("/api/analyze")
+"""
+
+@app.post("/api/analyze")
 async def analyze(file: UploadFile = File(...)):
     print(f"\n--> [АНАЛИЗ] Получен файл: {file.filename}", flush=True)
     try:
         content = await file.read()
         
-        # --- ГЛАВНОЕ ИЗМЕНЕНИЕ: FORCED JSON ---
-        # Мы заставляем модель отвечать в формате JSON
+        # Запрос в Google с требованием JSON
         response = model.generate_content(
             [SYSTEM_PROMPT, {"mime_type": file.content_type, "data": content}],
             safety_settings=SAFETY_SETTINGS,
             generation_config={"response_mime_type": "application/json"}
         )
         
-        # Попытка парсинга
         try:
-            # Очистка на случай, если модель добавит ```json
+            # Очистка от markdown на всякий случай
             text_response = response.text.replace("```json", "").replace("```", "").strip()
             data = json.loads(text_response)
             
-            # --- ПОДУШКА БЕЗОПАСНОСТИ ---
-            # Если модель забыла добавить блок client, мы добавим его сами, чтобы сайт не упал
-            if "client" not in data:
-                data["client"] = {"fio": "Пациент (данные не найдены)", "gender": "-", "age": "-", "date": "-"}
-            if "abnormal_results" not in data:
-                data["abnormal_results"] = []
-            if "expert_summary" not in data:
-                data["expert_summary"] = "Не удалось сформировать автоматическое заключение. Обратитесь к врачу."
-            if "priority_action" not in data:
-                data["priority_action"] = "Терапевт"
+            # Подушка безопасности (если поля пустые)
+            if "client" not in data: data["client"] = {}
+            if "abnormal_results" not in data: data["abnormal_results"] = []
+            if "expert_summary" not in data: data["expert_summary"] = "Анализ завершен."
+            if "priority_action" not in data: data["priority_action"] = "Терапевт"
                 
             return JSONResponse(content=data)
 
         except json.JSONDecodeError:
-            # Если вернулся мусор вместо JSON
             print("!!! ОШИБКА JSON: Модель вернула некорректный формат.")
             return JSONResponse(content={
                 "client": {"fio": "Ошибка чтения", "gender": "-", "age": "-", "date": "-"},
@@ -123,20 +114,18 @@ async def analyze(file: UploadFile = File(...)):
     except Exception as e:
         err_msg = str(e)
         print(f"!!! КРИТИЧЕСКАЯ ОШИБКА: {err_msg}", flush=True)
-        # Обработка лимитов
         if "429" in err_msg:
-             return JSONResponse(content={"error": "Слишком много запросов. Подождите 1 минуту."}, status_code=429)
+             return JSONResponse(content={"error": "Слишком много запросов. Подождите 1 минуту (Лимит Google)."}, status_code=429)
         return JSONResponse(content={"error": err_msg}, status_code=500)
 
 @app.post("/api/diet")
 async def generate_diet(request: DietRequest):
-    # Упрощенная логика для стабильности
     try:
         prompt = f"Составь диету на 1 день для пациента с такими анализами: {json.dumps(request.analysis_data, ensure_ascii=False)}. Используй HTML теги <b> и <br>."
         response = model.generate_content(prompt)
         return JSONResponse(content={"diet_plan": response.text})
     except Exception as e:
-        return JSONResponse(content={"diet_plan": "Не удалось составить диету."}, status_code=200) # Возвращаем 200, чтобы не пугать юзера ошибкой
+        return JSONResponse(content={"diet_plan": "Не удалось составить диету."}, status_code=200)
 
 @app.post("/api/voice")
 async def generate_voice(item: dict = Body(...)):
@@ -148,7 +137,6 @@ async def generate_voice(item: dict = Body(...)):
         audio_stream.seek(0)
         return StreamingResponse(audio_stream, media_type="audio/mp3")
     except Exception as e:
-        print(f"!!! ОШИБКА ГОЛОСА: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.post("/api/chat")
