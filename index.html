@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blood.AI — Умная расшифровка</title>
+    <title>Blood.AI — Visual Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -14,14 +14,14 @@
         .brand-logo { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3); }
         .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.05); }
         
-        /* Анимация загрузки */
+        /* ШКАЛЫ ЗДОРОВЬЯ (Новые стили) */
+        .scale-bg { background: #e2e8f0; height: 8px; border-radius: 4px; width: 100%; position: relative; overflow: hidden; margin-top: 6px; }
+        .scale-fill { height: 100%; background: linear-gradient(90deg, #ef4444, #dc2626); border-radius: 4px; width: 0%; animation: fillBar 1.5s ease-out forwards; }
+        @keyframes fillBar { from { width: 0%; } to { width: 85%; } }
+        
+        /* Анимация пульсации */
         @keyframes pulse-ring { 0% { transform: scale(0.8); opacity: 0.5; } 100% { transform: scale(2); opacity: 0; } }
         .pulse-ring::before { content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; border-radius: 50%; border: 2px solid #ef4444; animation: pulse-ring 2s infinite; }
-        
-        /* Стили для шкал */
-        .scale-bg { background: #f1f5f9; height: 6px; border-radius: 10px; overflow: hidden; position: relative; width: 100%; min-width: 80px; }
-        .scale-fill { height: 100%; background: linear-gradient(90deg, #ef4444, #b91c1c); border-radius: 10px; animation: slideRight 1s ease-out forwards; width: 0%; }
-        @keyframes slideRight { from { width: 0%; } to { width: 85%; } } /* Эффект заполнения */
     </style>
 </head>
 <body class="text-slate-800 min-h-screen flex flex-col items-center py-12 px-4">
@@ -33,7 +33,7 @@
             </div>
             <div>
                 <h1 class="text-2xl font-black tracking-tight text-slate-900">Blood.AI</h1>
-                <p class="text-xs text-slate-400 font-medium uppercase tracking-widest">Medical Analysis 3.0</p>
+                <p class="text-xs text-slate-400 font-medium uppercase tracking-widest">Version 3.1 (Visual)</p>
             </div>
         </div>
         <button onclick="toggleQRModal()" class="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors">
@@ -46,10 +46,10 @@
         <div id="promo-section" class="text-center py-10">
             <h2 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-6 leading-tight">
                 Расшифровка анализов <br>
-                <span class="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-600">искусственным интеллектом</span>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-600">v3.1 Визуализация</span>
             </h2>
             <p class="text-lg text-slate-500 mb-10 max-w-lg mx-auto leading-relaxed">
-                Загрузите фото или PDF. Нейросеть Gemini найдет отклонения, построит графики и даст рекомендации.
+                Загрузите фото. Нейросеть построит графики отклонений и даст рекомендации.
             </p>
             <button onclick="showUploadSection()" class="bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg shadow-xl hover:bg-slate-800 transition transform hover:-translate-y-1 flex items-center gap-3 mx-auto">
                 <i class="fa-solid fa-upload"></i>
@@ -57,17 +57,11 @@
             </button>
         </div>
 
-        <div id="upload-section" class="glass-panel rounded-3xl p-8 hidden animate-fade-in relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-orange-500"></div>
-            
+        <div id="upload-section" class="glass-panel rounded-3xl p-8 hidden relative overflow-hidden">
             <div id="drop-zone" class="border-2 border-dashed border-slate-200 hover:border-red-400 hover:bg-red-50/30 transition-all rounded-2xl p-12 text-center cursor-pointer min-h-[300px] flex flex-col items-center justify-center group">
-                <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                    <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-400 group-hover:text-red-500 transition-colors"></i>
-                </div>
-                <h3 class="text-xl font-bold text-slate-800 mb-2">Нажмите или перетащите файл</h3>
-                <p class="text-slate-400 text-sm max-w-xs mx-auto">Поддерживаются: Фото (JPG, PNG) и Документы (PDF)</p>
+                <i class="fa-solid fa-cloud-arrow-up text-4xl text-slate-300 group-hover:text-red-500 mb-4 transition-colors"></i>
+                <h3 class="text-xl font-bold text-slate-800">Нажмите для загрузки</h3>
             </div>
-
             <input type="file" id="file-input" class="hidden" accept="image/*,application/pdf">
 
             <div id="loading" class="hidden absolute inset-0 bg-white/95 z-10 flex flex-col items-center justify-center text-center backdrop-blur-sm">
@@ -76,8 +70,8 @@
                         <i class="fa-solid fa-microscope fa-spin-pulse"></i>
                     </div>
                 </div>
-                <h3 class="text-xl font-bold text-slate-800 mb-2">Изучаем показатели...</h3>
-                <p id="loading-text" class="text-sm text-slate-500 max-w-xs mx-auto font-mono">Соединение с нейросетью</p>
+                <h3 class="text-xl font-bold text-slate-800 mb-2">Анализ показателей...</h3>
+                <p id="loading-text" class="text-sm text-slate-500 font-mono">Соединение...</p>
             </div>
         </div>
 
@@ -89,25 +83,24 @@
                         <i class="fa-solid fa-user-check"></i>
                     </div>
                     <div>
-                        <h2 id="client-fio" class="font-bold text-lg text-slate-900">Загрузка...</h2>
+                        <h2 id="client-fio" class="font-bold text-lg text-slate-900">...</h2>
                         <div class="flex gap-3 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            <span id="client-gender">M</span> • <span id="client-age">-- лет</span>
+                            <span id="client-gender"></span> • <span id="client-age"></span>
                         </div>
                     </div>
                 </div>
                 <div class="text-right">
-                    <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">ДАТА АНАЛИЗА</p>
-                    <p id="analysis-date" class="font-mono text-lg font-bold text-slate-800">--.--.----</p>
+                    <p class="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">ДАТА</p>
+                    <p id="analysis-date" class="font-mono text-lg font-bold text-slate-800">...</p>
                 </div>
             </div>
 
             <div class="glass-panel rounded-3xl overflow-hidden shadow-lg border-0">
                 <div class="bg-slate-50/50 px-8 py-4 border-b border-slate-100 flex justify-between items-center backdrop-blur">
                     <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                        <i class="fa-solid fa-file-waveform text-red-500"></i>
-                        Отклонения от нормы
+                        <i class="fa-solid fa-chart-simple text-red-500"></i>
+                        Отклонения
                     </h3>
-                    <span class="text-xs font-bold bg-red-100 text-red-600 px-3 py-1 rounded-full">ВНИМАНИЕ</span>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
@@ -119,78 +112,45 @@
 
             <div class="glass-panel rounded-3xl p-8 relative overflow-hidden">
                 <div class="absolute top-0 left-0 w-1 h-full bg-slate-900"></div>
-                <h3 class="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-user-doctor text-slate-500"></i>
-                    Заключение AI
-                </h3>
-                <p id="expert-summary" class="text-slate-600 leading-relaxed mb-6 text-sm md:text-base">
-                    Анализ данных...
-                </p>
-                
-                <div class="flex flex-wrap gap-3 items-center">
-                    <div class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider">
-                        <i class="fa-solid fa-angles-right mr-1"></i> Куда идти: <span id="priority-action" class="text-slate-900">Терапевт</span>
-                    </div>
-                    <button onclick="playSummaryVoice()" class="ml-auto w-10 h-10 rounded-full bg-slate-900 text-white hover:scale-110 transition flex items-center justify-center">
-                        <i class="fa-solid fa-volume-high"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button onclick="generateDietPlan()" class="p-4 rounded-2xl bg-white border border-slate-200 hover:border-green-500 hover:shadow-lg transition-all text-left group">
-                    <div class="flex items-center gap-3 mb-2">
-                        <div class="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:bg-green-500 group-hover:text-white transition">
-                            <i class="fa-solid fa-leaf"></i>
-                        </div>
-                        <span class="font-bold text-slate-700 text-sm">План питания</span>
-                    </div>
-                    <p class="text-xs text-slate-400 pl-11">Рекомендации по диете</p>
-                </button>
-                
-                <button onclick="document.getElementById('ai-question').focus()" class="p-4 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 hover:shadow-lg transition-all text-left group">
-                    <div class="flex items-center gap-3 mb-2">
-                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition">
-                            <i class="fa-solid fa-comments"></i>
-                        </div>
-                        <span class="font-bold text-slate-700 text-sm">Чат с врачом</span>
-                    </div>
-                    <p class="text-xs text-slate-400 pl-11">Задать вопрос AI</p>
-                </button>
-            </div>
-
-            <div id="diet-plan-container" class="hidden glass-panel rounded-3xl p-8 border-l-4 border-green-500 animate-fade-in">
-                <h3 class="font-bold text-slate-900 mb-4 text-green-700">🥦 Персональное меню</h3>
-                <div id="diet-plan-content" class="text-slate-600 leading-relaxed text-sm"></div>
-            </div>
-
-            <div class="glass-panel rounded-3xl p-1 bg-gradient-to-br from-slate-800 to-slate-900 text-white shadow-2xl mt-8">
-                <div class="p-6">
-                    <p id="ai-answer" class="text-sm text-slate-300 hidden p-4 bg-white/10 rounded-2xl mb-4 leading-relaxed border border-white/10"></p>
-                </div>
-                <div class="p-2 flex gap-2">
-                    <input id="ai-question" type="text" placeholder="Спросите что-нибудь..." disabled
-                        class="w-full bg-slate-900/50 text-white placeholder-slate-500 px-6 py-4 rounded-2xl outline-none font-medium text-sm focus:bg-slate-900 transition">
-                    <button id="ask-btn" onclick="askAI()" disabled 
-                        class="bg-red-600 text-white w-14 rounded-2xl font-bold hover:bg-red-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-lg shadow-red-900/50">
-                        <i class="fa-solid fa-paper-plane"></i>
-                    </button>
+                <h3 class="font-bold text-slate-900 mb-4">Заключение AI</h3>
+                <p id="expert-summary" class="text-slate-600 leading-relaxed mb-6 text-sm"></p>
+                <div class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider inline-block">
+                    <i class="fa-solid fa-user-doctor mr-1"></i> <span id="priority-action"></span>
                 </div>
             </div>
             
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="playSummaryVoice()" class="p-4 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 font-bold text-slate-700 text-sm flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-volume-high text-slate-400"></i> Слушать
+                </button>
+                <button onclick="generateDietPlan()" class="p-4 rounded-2xl bg-white border border-slate-200 hover:bg-green-50 hover:text-green-700 hover:border-green-200 font-bold text-slate-700 text-sm flex items-center justify-center gap-2 transition">
+                    <i class="fa-solid fa-apple-whole text-green-500"></i> Диета
+                </button>
+            </div>
+
+            <div id="diet-plan-container" class="hidden glass-panel rounded-3xl p-8 border-l-4 border-green-500">
+                <div id="diet-plan-content" class="text-slate-600 text-sm leading-relaxed"></div>
+            </div>
+
+            <div class="glass-panel rounded-3xl p-4 bg-slate-900 text-white mt-8">
+                <div id="ai-answer" class="hidden p-4 bg-white/10 rounded-xl mb-4 text-sm text-slate-200"></div>
+                <div class="flex gap-2">
+                    <input id="ai-question" type="text" placeholder="Вопрос..." disabled class="w-full bg-slate-800 px-4 py-3 rounded-xl text-sm outline-none">
+                    <button id="ask-btn" onclick="askAI()" disabled class="bg-red-600 w-12 rounded-xl flex items-center justify-center hover:bg-red-500"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            </div>
+
         </div>
     </main>
 
-    <footer class="mt-12 text-center pb-8 opacity-40 hover:opacity-100 transition-opacity">
+    <footer class="mt-12 text-center pb-8 opacity-40">
         <div id="footer-qrcode" class="flex justify-center mb-4 mix-blend-multiply"></div>
-        <p class="text-[10px] text-slate-500 font-mono tracking-widest uppercase">Secured by Google Cloud • 2026</p>
+        <p class="text-[10px] text-slate-500 font-mono tracking-widest uppercase">Blood.AI v3.1</p>
     </footer>
 
-    <div id="qr-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center animate-fade-in" onclick="toggleQRModal()">
-        <div class="bg-white p-10 rounded-[2rem] text-center max-w-xs mx-4 shadow-2xl transform transition-all scale-100" onclick="event.stopPropagation()">
-            <h3 class="font-bold text-slate-800 mb-6 text-lg">Сканируйте телефоном</h3>
-            <div id="modal-qrcode" class="flex justify-center mb-6"></div>
-            <p class="text-xs text-slate-400 font-medium">Чтобы загрузить фото анализа</p>
+    <div id="qr-modal" class="fixed inset-0 bg-slate-900/80 hidden items-center justify-center z-50" onclick="toggleQRModal()">
+        <div class="bg-white p-8 rounded-3xl text-center" onclick="event.stopPropagation()">
+            <div id="modal-qrcode" class="flex justify-center"></div>
         </div>
     </div>
 
@@ -209,24 +169,17 @@
             const m=document.getElementById('qr-modal'); 
             m.style.display=(m.style.display==='flex'?'none':'flex');
             if(m.style.display==='flex' && !document.getElementById('modal-qrcode').hasChildNodes()){
-                 new QRCode(document.getElementById("modal-qrcode"), { text: window.location.href, width: 180, height: 180 });
+                 new QRCode(document.getElementById("modal-qrcode"), { text: window.location.href, width: 150, height: 150 });
             }
         }
 
         dropZone.onclick=()=>fileInput.click();
-        dropZone.ondragover=(e)=>{e.preventDefault(); dropZone.classList.add('border-red-500', 'bg-red-50');};
-        dropZone.ondragleave=(e)=>{e.preventDefault(); dropZone.classList.remove('border-red-500', 'bg-red-50');};
-        dropZone.ondrop=(e)=>{e.preventDefault(); handleFile(e.dataTransfer.files[0]);};
         fileInput.onchange=(e)=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
 
         async function handleFile(file) {
             loading.classList.remove('hidden'); dropZone.classList.add('hidden');
-            loadingText.innerText = "Связь с медицинским облаком...";
-            
-            wakeUpTimer = setTimeout(() => {
-                loadingText.innerText = "Сервер просыпается... Подождите ~40 сек.";
-                loadingText.className = "text-orange-500 font-mono text-xs animate-pulse";
-            }, 4000);
+            loadingText.innerText = "Связь с сервером...";
+            wakeUpTimer = setTimeout(() => { loadingText.innerText = "Сервер просыпается... ~40 сек."; loadingText.className = "text-orange-500 font-mono text-xs animate-pulse"; }, 4000);
 
             const formData = new FormData();
             formData.append('file', file);
@@ -234,64 +187,51 @@
             try {
                 const response = await fetch(`${SERVER_URL}/api/analyze`, { method: 'POST', body: formData });
                 clearTimeout(wakeUpTimer);
-                
-                if (!response.ok) {
-                    const errData = await response.json();
-                    throw new Error(errData.error || response.status);
-                }
+                if (!response.ok) { const err = await response.json(); throw new Error(err.error || response.status); }
                 currentAnalysisData = await response.json();
                 displayResults(currentAnalysisData);
             } catch (error) {
                 clearTimeout(wakeUpTimer);
-                alert(error.message.includes("429") ? "✋ Лимит запросов. Подождите 1 минуту." : "Ошибка: " + error.message);
-                dropZone.classList.remove('hidden'); loading.classList.add('hidden'); fileInput.value = ''; 
+                alert(error.message.includes("429") ? "✋ Лимит. Ждите 1 мин." : "Ошибка: " + error.message);
+                dropZone.classList.remove('hidden'); loading.classList.add('hidden'); fileInput.value = '';
             }
         }
 
         function displayResults(data) {
             upload.classList.add('hidden'); resSec.classList.remove('hidden');
-            const client = data.client || {};
-            document.getElementById('client-fio').innerText = client.fio || "Пациент";
-            document.getElementById('client-gender').innerText = client.gender || "—";
-            document.getElementById('client-age').innerText = client.age || "—";
-            document.getElementById('analysis-date').innerText = client.date || "--.--.----";
+            const cl = data.client || {};
+            document.getElementById('client-fio').innerText = cl.fio || "Пациент";
+            document.getElementById('client-gender').innerText = cl.gender || "-";
+            document.getElementById('client-age').innerText = cl.age || "-";
+            document.getElementById('analysis-date').innerText = cl.date || "--.--.--";
             
             const tbody = document.getElementById('results-body');
             tbody.innerHTML = '';
             
-            const results = data.abnormal_results || [];
-            if(results.length === 0) {
-                 tbody.innerHTML = `<tr><td colspan="4" class="px-8 py-10 text-center text-green-600 font-bold bg-green-50/50"><i class="fa-solid fa-check-circle text-4xl mb-2 block"></i>Показатели в норме!</td></tr>`;
+            const res = data.abnormal_results || [];
+            if(res.length === 0) {
+                 tbody.innerHTML = `<tr><td class="px-8 py-10 text-center text-green-600 font-bold bg-green-50/50">🎉 Норма!</td></tr>`;
             } else {
-                results.forEach(item => {
-                    // ГЕНЕРАЦИЯ ВИЗУАЛЬНОЙ СТРОКИ
+                res.forEach(item => {
+                    // --- ГЕНЕРАЦИЯ ПОЛОСОК ---
                     tbody.innerHTML += `
-                    <tr class="border-b border-slate-50 hover:bg-slate-50 transition-colors group">
-                        <td class="px-6 py-5 align-top w-1/4">
+                    <tr class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-5 align-top w-1/3">
                             <div class="font-bold text-slate-800 text-sm">${item.name}</div>
-                            <div class="text-[10px] text-slate-400 font-mono mt-1 bg-slate-100 inline-block px-1.5 py-0.5 rounded">
-                                Норма: ${item.range}
-                            </div>
+                            <div class="text-[10px] text-slate-400 font-mono mt-1">Норма: ${item.range}</div>
                         </td>
-                        
-                        <td class="px-6 py-5 align-top w-1/4">
+                        <td class="px-6 py-5 align-top w-1/3">
                             <div class="flex flex-col gap-1">
                                 <span class="font-black text-red-600 text-lg leading-none">${item.value}</span>
-                                <div class="scale-bg mt-1">
-                                    <div class="scale-fill"></div>
-                                </div>
-                                <span class="text-[9px] text-red-500 font-bold uppercase tracking-wider">Отклонение</span>
+                                <div class="scale-bg"><div class="scale-fill"></div></div>
                             </div>
                         </td>
-
-                        <td class="px-6 py-5 align-top text-sm text-slate-600 leading-relaxed italic">
-                            ${item.analysis}
-                        </td>
+                        <td class="px-6 py-5 align-top text-xs text-slate-500 italic">${item.analysis}</td>
                     </tr>`;
                 });
             }
 
-            document.getElementById('expert-summary').innerText = data.expert_summary || "Нет данных.";
+            document.getElementById('expert-summary').innerText = data.expert_summary || "";
             document.getElementById('priority-action').innerText = data.priority_action || "Терапевт";
             
             document.getElementById('ai-question').disabled = false;
@@ -300,54 +240,30 @@
         }
 
         async function generateDietPlan() {
-            const container = document.getElementById('diet-plan-container');
-            const content = document.getElementById('diet-plan-content');
-            container.classList.remove('hidden');
-            content.innerText = "🥬 Составляю меню...";
-            container.scrollIntoView({ behavior: 'smooth' });
-
+            const c = document.getElementById('diet-plan-container'), t = document.getElementById('diet-plan-content');
+            c.classList.remove('hidden'); t.innerText = "Генерация меню...";
             try {
-                const response = await fetch(`${SERVER_URL}/api/diet`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ analysis_data: currentAnalysisData })
-                });
-                const data = await response.json();
-                content.innerHTML = data.diet_plan ? data.diet_plan.replace(/\n/g, '<br>') : "Нет данных.";
-            } catch (error) { content.innerText = "Ошибка диеты."; }
+                const r = await fetch(`${SERVER_URL}/api/diet`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({analysis_data: currentAnalysisData})});
+                const d = await r.json(); t.innerHTML = d.diet_plan ? d.diet_plan.replace(/\n/g, '<br>') : "Нет данных";
+            } catch(e) { t.innerText = "Ошибка"; }
         }
 
         async function playSummaryVoice() {
             try {
-                const response = await fetch(`${SERVER_URL}/api/voice`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: document.getElementById('expert-summary').innerText })
-                });
-                const blob = await response.blob();
-                new Audio(URL.createObjectURL(blob)).play();
-            } catch (e) { alert("Ошибка озвучки."); }
+                const r = await fetch(`${SERVER_URL}/api/voice`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({text: document.getElementById('expert-summary').innerText})});
+                const b = await r.blob(); new Audio(URL.createObjectURL(b)).play();
+            } catch(e) { alert("Ошибка"); }
         }
 
         async function askAI() {
-            const inp = document.getElementById('ai-question');
-            const btn = document.getElementById('ask-btn');
-            const ans = document.getElementById('ai-answer');
-            const q = inp.value.trim();
-            if (!q) return;
-
-            const oldIcon = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            btn.disabled = true;
-            ans.classList.remove('hidden'); ans.innerText = "Думаю...";
-            
+            const i = document.getElementById('ai-question'), b = document.getElementById('ask-btn'), a = document.getElementById('ai-answer');
+            if(!i.value.trim()) return;
+            const old = b.innerHTML; b.innerHTML='...'; b.disabled=true; a.classList.remove('hidden'); a.innerText="Думаю...";
             try {
-                const response = await fetch(`${SERVER_URL}/api/chat`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ question: q, analysis_data: currentAnalysisData })
-                });
-                const data = await response.json();
-                ans.innerHTML = `<strong class="text-white">AI:</strong> ${data.answer.replace(/\n/g, '<br>')}`;
-            } catch (e) { ans.innerText = "Ошибка."; }
-            btn.innerHTML = oldIcon; btn.disabled = false; inp.value = '';
+                const r = await fetch(`${SERVER_URL}/api/chat`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({question: i.value, analysis_data: currentAnalysisData})});
+                const d = await r.json(); a.innerHTML = `<b>AI:</b> ${d.answer.replace(/\n/g, '<br>')}`;
+            } catch(e) { a.innerText="Ошибка"; }
+            b.innerHTML=old; b.disabled=false; i.value='';
         }
         
         window.onload = function() {
